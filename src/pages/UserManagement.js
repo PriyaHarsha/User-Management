@@ -5,6 +5,7 @@ import Form from "react-bootstrap/Form";
 import InputGroup from "react-bootstrap/InputGroup";
 
 const UserManagement = () => {
+  //create states to store users, formData, error, pageNo, loding
   const [users, setUsers] = useState([]);
   const [formData, setFormData] = useState({
     id: "",
@@ -19,8 +20,8 @@ const UserManagement = () => {
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch users from API
-  const fetchUsers = async (reset = false) => {
+  // Fetch users from Mockend API
+  const fetchUsers = async (reset) => {
     try {
       setIsLoading(true);
       const response = await axios.get(
@@ -29,24 +30,29 @@ const UserManagement = () => {
           params: { _page: page, _limit: 6 },
         }
       );
+      //update users
       setUsers((prev) => (reset ? response.data : [...prev, ...response.data]));
       setHasMore(response.data.length > 0);
     } catch (err) {
+      //update error
       setError("Failed to fetch users");
     } finally {
       setIsLoading(false);
     }
   };
 
+  //side effect to fetch the data when page number changes
   useEffect(() => {
     fetchUsers();
   }, [page]);
 
+  //Handle change in the inputs
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  //validate the form
   const validateForm = () => {
     const { firstName, lastName, email, department } = formData;
     if (!firstName || !lastName || !email || !department) {
@@ -61,22 +67,51 @@ const UserManagement = () => {
     return true;
   };
 
+  //Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
+    //check for validation
     if (!validateForm()) return;
-
+    let newuser = {
+      id: formData.id,
+      name: formData.firstName + " " + formData.lastName,
+      email: formData.email,
+      company: { name: formData.department },
+    };
     try {
       if (isEditing) {
-        await axios.put(
+        //update the existing if it is an edit
+        const response = await axios.put(
           `https://jsonplaceholder.typicode.com/users/${formData.id}`,
-          formData
+          newuser
         );
+        setUsers((prevUsers) => {
+          // Find the index of the user to be replaced
+          const index = prevUsers.findIndex(
+            (user) => user.id === response.data.id
+          );
+          if (index === -1) {
+            return prevUsers; // Return the original array if the user is not found
+          }
+
+          // Create a copy of the users array
+          const newUsers = [...prevUsers];
+
+          // Replace the user at the found index using splice
+          newUsers.splice(index, 1, response.data);
+
+          // Return the updated array
+          return newUsers;
+        });
       } else {
-        await axios.post(
+        //add new user
+        const response = await axios.post(
           "https://jsonplaceholder.typicode.com/users",
-          formData
+          newuser
         );
+        setUsers((prevUsers) => [...prevUsers, response.data]);
       }
+      //clear form data
       setFormData({
         id: "",
         firstName: "",
@@ -85,13 +120,12 @@ const UserManagement = () => {
         department: "",
       });
       setIsEditing(false);
-      setPage(1);
-      fetchUsers(true);
     } catch (err) {
-      setError("Failed to save user.");
+      setError("Failed to save user");
     }
   };
 
+  //handle edit
   const handleEdit = (user) => {
     setFormData({
       id: user.id,
@@ -103,16 +137,17 @@ const UserManagement = () => {
     setIsEditing(true);
   };
 
+  //handle delete
   const handleDelete = async (id) => {
     try {
       await axios.delete(`https://jsonplaceholder.typicode.com/users/${id}`);
-      setPage(1);
-      fetchUsers(true);
+      setUsers(users.filter((user) => user.id !== id));
     } catch (err) {
       setError("Failed to delete user.");
     }
   };
 
+  //update page number to load more
   const loadMoreUsers = () => {
     if (!isLoading && hasMore) {
       setPage((prev) => prev + 1);
